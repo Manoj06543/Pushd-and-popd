@@ -1,0 +1,122 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+
+#define STACK_FILE "dir_stack.txt"
+#define MAX_PATH 1024
+#define MAX_STACK_SIZE 100
+
+// Function prototypes
+void pushd(const char *dir);
+void popd(void);
+void print_usage(void);
+void load_stack(char stack[][MAX_PATH], int *size);
+void save_stack(const char stack[][MAX_PATH], int size);
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        print_usage();
+        return EXIT_FAILURE;
+    }
+
+    if (strcmp(argv[1], "pushd") == 0) {
+        if (argc != 3) {
+            print_usage();
+            return EXIT_FAILURE;
+        }
+        pushd(argv[2]);
+    } else if (strcmp(argv[1], "popd") == 0) {
+        popd();
+    } else {
+        print_usage();
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
+void pushd(const char *dir) {
+    char stack[MAX_STACK_SIZE][MAX_PATH];
+    int size = 0;
+    load_stack(stack, &size);
+
+    // Get the current directory
+    char current_dir[MAX_PATH];
+    if (getcwd(current_dir, sizeof(current_dir)) == NULL) {
+        perror("getcwd");
+        exit(EXIT_FAILURE);
+    }
+
+    // Push the current directory onto the stack
+    if (size < MAX_STACK_SIZE) {
+        strncpy(stack[size], current_dir, MAX_PATH);
+        size++;
+    } else {
+        fprintf(stderr, "Directory stack is full\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Save the stack to file
+    save_stack(stack, size);
+
+    // Change to the new directory
+    if (chdir(dir) != 0) {
+        perror("chdir");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void popd(void) {
+    char stack[MAX_STACK_SIZE][MAX_PATH];
+    int size = 0;
+    load_stack(stack, &size);
+
+    if (size == 0) {
+        fprintf(stderr, "Directory stack is empty\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Pop the top directory from the stack
+    size--;
+    if (chdir(stack[size]) != 0) {
+        perror("chdir");
+        exit(EXIT_FAILURE);
+    }
+
+    // Save the stack to file
+    save_stack(stack, size);
+}
+
+void load_stack(char stack[][MAX_PATH], int *size) {
+    FILE *file = fopen(STACK_FILE, "r");
+    if (file == NULL) {
+        *size = 0; // No stack file means an empty stack
+        return;
+    }
+
+    while (fgets(stack[*size], MAX_PATH, file) != NULL && *size < MAX_STACK_SIZE) {
+        // Remove newline character
+        stack[*size][strcspn(stack[*size], "\n")] = '\0';
+        (*size)++;
+    }
+    fclose(file);
+}
+
+void save_stack(const char stack[][MAX_PATH], int size) {
+    FILE *file = fopen(STACK_FILE, "w");
+    if (file == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < size; i++) {
+        fprintf(file, "%s\n", stack[i]);
+    }
+    fclose(file);
+}
+
+void print_usage(void) {
+    fprintf(stderr, "Usage: <program> [pushd <directory> | popd]\n");
+}
